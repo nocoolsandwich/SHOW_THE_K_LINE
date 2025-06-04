@@ -342,7 +342,9 @@ def search_stocks(query):
         return '', 200
         
     try:
-        if not cache.stock_list is not None:
+        # 判断股票列表是否已加载，原代码使用 "not cache.stock_list is not None" 会始终为 True
+        # 因为 "not" 的优先级高于 "is"，导致条件永远成立，函数无法正常工作
+        if cache.stock_list is None:
             return jsonify({'error': '股票列表未加载'}), 500
         
         # 搜索匹配的股票
