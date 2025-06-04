@@ -342,7 +342,7 @@ def search_stocks(query):
         return '', 200
         
     try:
-        if not cache.stock_list is not None:
+        if cache.stock_list is None:
             return jsonify({'error': '股票列表未加载'}), 500
         
         # 搜索匹配的股票
