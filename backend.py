@@ -342,7 +342,7 @@ def search_stocks(query):
         return '', 200
         
     try:
-        if not cache.stock_list is not None:
+        if cache.stock_list is None:
             return jsonify({'error': '股票列表未加载'}), 500
         
         # 搜索匹配的股票
@@ -382,11 +382,13 @@ def update_stock_list():
         success = cache.update_stock_list()
         if success:
             response = jsonify({'message': '股票列表更新成功'})
+            status_code = 200
         else:
-            response = jsonify({'error': '股票列表更新失败'}), 500
-            
+            response = jsonify({'error': '股票列表更新失败'})
+            status_code = 500
+
         response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
+        return response, status_code
     except Exception as e:
         error_response = jsonify({'error': str(e)})
         error_response.headers.add('Access-Control-Allow-Origin', '*')
