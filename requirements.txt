@@ -1,0 +1,5 @@
+flask==2.3.3
+flask-cors==4.0.0
+tushare==1.2.89
+pandas==2.0.3
+requests==2.31.0 

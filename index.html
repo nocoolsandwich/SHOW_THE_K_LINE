@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票信息查看器</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/pdf-parse@1.1.1/lib/pdf-parse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 股票信息查看器</h1>
+            <p>上传PDF或粘贴文本，鼠标悬停查看股票信息</p>
+            
+            <!-- 添加状态显示区域 -->
+            <div class="status-bar" id="statusBar">
+                <div class="status-item">
+                    <span class="status-label">后端服务:</span>
+                    <span class="status-value" id="backendStatus">检查中...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">股票数据:</span>
+                    <span class="status-value" id="stockDataStatus">加载中...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="input-section">
+            <div class="upload-area">
+                <h3>📄 上传PDF文件</h3>
+                <div class="upload-zone" id="uploadZone">
+                    <input type="file" id="pdfInput" accept=".pdf" style="display: none;">
+                    <div class="upload-content">
+                        <div class="upload-icon">📎</div>
+                        <p>点击选择PDF文件或拖拽到此处</p>
+                        <button class="upload-btn" onclick="document.getElementById('pdfInput').click()">选择文件</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-area">
+                <h3>📝 粘贴文本</h3>
+                <textarea id="textInput" placeholder="在此粘贴包含股票代码的文本...&#10;例如: 腾讯控股(00700)今日上涨3%，阿里巴巴-SW(09988)下跌1.5%"></textarea>
+                <button class="process-btn" onclick="processText()">分析文本</button>
+            </div>
+        </div>
+
+        <div class="result-section" id="resultSection" style="display: none;">
+            <h3>📊 分析结果</h3>
+            <div class="processed-text" id="processedText"></div>
+        </div>
+
+        <div class="modal" id="stockModal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal()">&times;</span>
+                <div class="modal-header">
+                    <h2 id="stockName">股票信息</h2>
+                    <p id="stockCode"></p>
+                </div>
+                <div class="modal-body">
+                    <div class="stock-info">
+                        <div class="info-item">
+                            <span class="label">当前价格:</span>
+                            <span class="value" id="currentPrice">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">涨跌幅:</span>
+                            <span class="value" id="changePercent">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">成交量:</span>
+                            <span class="value" id="volume">--</span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="stockChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>正在处理中...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

@@ -1,0 +1,25 @@
+{
+  "name": "stock-info-viewer",
+  "version": "1.0.0",
+  "description": "一个用于识别和显示股票信息的网页应用",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "dev": "live-server ."
+  },
+  "keywords": [
+    "股票",
+    "PDF解析",
+    "数据可视化",
+    "K线图"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "pdf-lib": "^1.17.1"
+  }
+} 
