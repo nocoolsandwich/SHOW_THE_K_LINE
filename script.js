@@ -538,11 +538,10 @@ function handleStockLeave() {
         hoverTimeout = null;
     }
     
-    currentHoverElement = null;
-    
     // 延迟隐藏tooltip，给用户时间移动到tooltip上
     setTimeout(() => {
-        if (!currentHoverElement) {
+        const tooltip = document.getElementById('stock-tooltip');
+        if (tooltip && !tooltip.matches(':hover') && !currentHoverElement) {
             hideStockTooltip();
         }
     }, 300);
@@ -615,7 +614,12 @@ function createStockTooltip() {
     });
     
     tooltip.addEventListener('mouseleave', () => {
-        hideStockTooltip();
+        currentHoverElement = null;
+        setTimeout(() => {
+            if (!tooltip.matches(':hover')) {
+                hideStockTooltip();
+            }
+        }, 300);
     });
     
     document.body.appendChild(tooltip);
@@ -693,7 +697,7 @@ function updateTooltipContent(tooltip, stockName, stockCode, stockData) {
                 </div>
             </div>
             <div class="mini-chart" style="height: 100px; position: relative;">
-                <canvas id="tooltip-chart" width="320" height="100"></canvas>
+                <div id="tooltip-chart" style="width: 320px; height: 100px;"></div>
             </div>
             <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
                 点击查看完整信息
@@ -709,46 +713,72 @@ function updateTooltipContent(tooltip, stockName, stockCode, stockData) {
 
 // 绘制迷你图表
 function drawMiniChart(chartData) {
-    const canvas = document.getElementById('tooltip-chart');
-    if (!canvas || !chartData || chartData.length === 0) return;
+    const chartDom = document.getElementById('tooltip-chart');
+    if (!chartDom || !chartData || chartData.length === 0) return;
     
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+    // 初始化ECharts实例
+    const chart = echarts.init(chartDom);
     
-    // 清除画布
-    ctx.clearRect(0, 0, width, height);
+    // 准备数据
+    const dates = chartData.map(d => d.date);
+    const values = chartData.map(d => [d.open, d.close, d.low, d.high]);
     
-    // 计算价格范围
-    const prices = chartData.map(d => d.close);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice;
+    // 配置项
+    const option = {
+        animation: false,
+        grid: {
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0
+        },
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'cross'
+            },
+            formatter: function(params) {
+                const data = params[0].data;
+                return `日期：${params[0].axisValue}<br/>
+                        开盘：${data[0]}<br/>
+                        收盘：${data[1]}<br/>
+                        最低：${data[2]}<br/>
+                        最高：${data[3]}`;
+            }
+        },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            show: false,
+            scale: true,
+            boundaryGap: false
+        },
+        yAxis: {
+            type: 'value',
+            show: false,
+            scale: true
+        },
+        series: [
+            {
+                type: 'candlestick',
+                data: values,
+                itemStyle: {
+                    color: '#ec0000',
+                    color0: '#00da3c',
+                    borderColor: '#8A0000',
+                    borderColor0: '#008F28'
+                }
+            }
+        ]
+    };
     
-    // 绘制折线
-    ctx.strokeStyle = '#667eea';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
+    // 使用配置项显示图表
+    chart.setOption(option);
     
-    chartData.forEach((point, index) => {
-        const x = (index / (chartData.length - 1)) * (width - 20) + 10;
-        const y = height - 10 - ((point.close - minPrice) / priceRange) * (height - 20);
-        
-        if (index === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
+    // 响应窗口大小变化
+    window.addEventListener('resize', function() {
+        chart.resize();
     });
-    
-    ctx.stroke();
-    
-    // 绘制填充区域
-    ctx.fillStyle = 'rgba(102, 126, 234, 0.1)';
-    ctx.lineTo(width - 10, height - 10);
-    ctx.lineTo(10, height - 10);
-    ctx.closePath();
-    ctx.fill();
 }
 
 // 显示股票信息弹窗（点击时）
@@ -803,58 +833,82 @@ async function loadStockDataForModal(stockCode) {
 
 // 绘制股票K线图
 function drawStockChart(data) {
-    const ctx = document.getElementById('stockChart').getContext('2d');
+    const chartDom = document.getElementById('stockChart');
     
     // 销毁之前的图表
     if (currentChart) {
-        currentChart.destroy();
+        currentChart.dispose();
     }
     
-    currentChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: data.map(d => d.date),
-            datasets: [{
-                label: '收盘价',
-                data: data.map(d => d.close),
-                borderColor: '#667eea',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.3
-            }]
+    // 初始化ECharts实例
+    currentChart = echarts.init(chartDom);
+    
+    // 准备数据
+    const dates = data.map(d => d.date);
+    const values = data.map(d => [d.open, d.close, d.low, d.high]);
+    
+    // 配置项
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'cross'
+            }
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%'
+        },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            scale: true,
+            boundaryGap: false,
+            axisLine: { onZero: false },
+            splitLine: { show: false },
+            min: 'dataMin',
+            max: 'dataMax'
+        },
+        yAxis: {
+            scale: true,
+            splitArea: {
+                show: true
+            }
+        },
+        dataZoom: [
+            {
+                type: 'inside',
+                start: 0,
+                end: 100
             },
-            scales: {
-                x: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: '日期'
-                    }
-                },
-                y: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: '价格 (¥)'
-                    }
-                }
-            },
-            elements: {
-                point: {
-                    radius: 3,
-                    hoverRadius: 6
+            {
+                show: true,
+                type: 'slider',
+                bottom: '5%'
+            }
+        ],
+        series: [
+            {
+                name: 'K线',
+                type: 'candlestick',
+                data: values,
+                itemStyle: {
+                    color: '#ec0000',
+                    color0: '#00da3c',
+                    borderColor: '#8A0000',
+                    borderColor0: '#008F28'
                 }
             }
-        }
+        ]
+    };
+    
+    // 使用配置项显示图表
+    currentChart.setOption(option);
+    
+    // 响应窗口大小变化
+    window.addEventListener('resize', function() {
+        currentChart.resize();
     });
 }
 
