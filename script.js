@@ -386,6 +386,7 @@ async function highlightStocks(text) {
         '微软': { symbol: 'MSFT', name: 'Microsoft', ts_code: 'MSFT.US' },
         '亚马逊': { symbol: 'AMZN', name: 'Amazon', ts_code: 'AMZN.US' },
         'Constellation': { symbol: 'CEG', name: 'Constellation Energy', ts_code: 'CEG.US' },
+        '王子新材': { symbol: '002735', name: '王子新材', ts_code: '002735.SZ' },
     };
 
     // 合并额外的股票数据到映射中
@@ -398,44 +399,61 @@ async function highlightStocks(text) {
     // 按照长度排序，先匹配长的词汇，避免短词汇覆盖长词汇
     const allStockKeys = Object.keys(stockMappings).sort((a, b) => b.length - a.length);
 
+    // 首先处理所有中文股票名称
     for (const stockKey of allStockKeys) {
-        const stockInfo = stockMappings[stockKey];
-        
-        // 创建精确的匹配模式
-        let patterns = [];
-        
-        // 匹配6位数字股票代码（前后必须是非数字字符或边界）
-        if (/^\d{6}$/.test(stockKey)) {
-            patterns.push(new RegExp(`(?<!\\d)${escapeRegExp(stockKey)}(?!\\d)`, 'g'));
-        }
-        // 匹配带括号的股票代码
-        patterns.push(new RegExp(`\\(${escapeRegExp(stockKey)}\\)`, 'g'));
-        
-        // 匹配股票名称（前后必须是非中文字符或边界）
-        if (/[\u4e00-\u9fa5]/.test(stockKey) && stockKey.length >= 2) {
-            // 修改匹配方式，不需要前后必须是非中文字符
-            patterns.push(new RegExp(`${escapeRegExp(stockKey)}`, 'g'));
-        }
-        
-        // 匹配英文股票代码（前后必须是非字母字符或边界）
-        if (/^[A-Z]+$/.test(stockKey) && stockKey.length >= 2) {
-            patterns.push(new RegExp(`(?<![A-Za-z])${escapeRegExp(stockKey)}(?![A-Za-z])`, 'g'));
-        }
-
-        // 对每个模式进行匹配
-        for (const pattern of patterns) {
+        if (/[\u4e00-\u9fa5]/.test(stockKey)) {
+            const stockInfo = stockMappings[stockKey];
+            const escapedKey = escapeRegExp(stockKey);
+            
+            // 使用更精确的匹配模式
+            const pattern = new RegExp(escapedKey, 'g');
             const matches = text.match(pattern);
+            
             if (matches) {
                 matches.forEach(match => {
-                    const cleanMatch = match.replace(/[()]/g, '');
-                    if (!stocksFound.has(cleanMatch)) {
-                        stocksFound.set(cleanMatch, {
+                    if (!stocksFound.has(match)) {
+                        stocksFound.set(match, {
                             key: stockKey,
                             info: stockInfo,
                             match: match
                         });
                     }
                 });
+            }
+        }
+    }
+
+    // 然后处理其他类型的股票代码
+    for (const stockKey of allStockKeys) {
+        if (!/[\u4e00-\u9fa5]/.test(stockKey)) {
+            const stockInfo = stockMappings[stockKey];
+            let patterns = [];
+            
+            // 匹配6位数字股票代码
+            if (/^\d{6}$/.test(stockKey)) {
+                patterns.push(new RegExp(`(?<!\\d)${escapeRegExp(stockKey)}(?!\\d)`, 'g'));
+            }
+            // 匹配带括号的股票代码
+            patterns.push(new RegExp(`\\(${escapeRegExp(stockKey)}\\)`, 'g'));
+            // 匹配英文股票代码
+            if (/^[A-Z]+$/.test(stockKey)) {
+                patterns.push(new RegExp(`(?<![A-Za-z])${escapeRegExp(stockKey)}(?![A-Za-z])`, 'g'));
+            }
+
+            for (const pattern of patterns) {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        const cleanMatch = match.replace(/[()]/g, '');
+                        if (!stocksFound.has(cleanMatch)) {
+                            stocksFound.set(cleanMatch, {
+                                key: stockKey,
+                                info: stockInfo,
+                                match: match
+                            });
+                        }
+                    });
+                }
             }
         }
     }
@@ -450,14 +468,12 @@ async function highlightStocks(text) {
     // 替换文本中的股票为高亮链接
     for (const [stockKey, stockData] of sortedStocks) {
         const { info, match } = stockData;
-        const escapedMatch = escapeRegExp(match);
         
-        // 创建替换模式，确保不会重复替换已经高亮的内容
-        const replacePattern = new RegExp(`(?<!data-stock-code=")\\b${escapedMatch}\\b(?![^<]*>)`, 'g');
-        
+        // 使用更简单的替换模式
         const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}">${info.name}(${info.symbol})</span>`;
         
-        processedText = processedText.replace(replacePattern, replacement);
+        // 直接替换匹配的文本
+        processedText = processedText.replace(match, replacement);
     }
 
     return processedText;
