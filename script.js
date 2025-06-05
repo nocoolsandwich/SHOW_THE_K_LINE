@@ -7,7 +7,19 @@ let stockDataLoaded = false;
 let currentChart = null;
 let hoverTimeout = null;
 let currentHoverElement = null;
-const API_BASE_URL = 'http://127.0.0.1:5000/api';  // 使用127.0.0.1而不是localhost
+
+// 动态获取API基础URL
+const API_BASE_URL = getAPIBaseURL();
+
+// 获取API基础URL
+function getAPIBaseURL() {
+    // 获取当前主机
+    const host = window.location.hostname;
+    const port = '5000'; // 后端服务端口
+    
+    // 使用相对协议，自动适应http或https
+    return `${window.location.protocol}//${host}:${port}/api`;
+}
 
 // 更新状态显示
 function updateStatus(type, status, className = '') {

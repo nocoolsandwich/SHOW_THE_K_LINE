@@ -496,5 +496,7 @@ def get_intraday_data(stock_code):
 
 if __name__ == '__main__':
     print("启动Tushare股票数据API服务...")
-    print(f"股票列表缓存状态: {'有效' if cache.stock_list is not None else '无效'}")
+    cache.update_stock_list()
+    
+    # 允许从外部设备访问，0.0.0.0表示监听所有网络接口
     app.run(host='0.0.0.0', port=5000, debug=True) 

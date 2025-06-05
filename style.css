@@ -485,4 +485,66 @@ header p {
 .status-value.success {
     background: #d4edda;
     color: #155724;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 15px;
+    }
+    
+    .input-section {
+        flex-direction: column;
+    }
+    
+    .modal-content {
+        margin: 2% auto;
+        width: 95%;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+    
+    .stock-info {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .tooltip {
+        width: 300px;
+    }
+}
+
+@media (max-width: 480px) {
+    .status-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .chart-container {
+        height: 250px;
+        padding: 10px;
+    }
+    
+    .modal-content {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+    }
+    
+    .close {
+        top: 15px;
+        right: 15px;
+    }
+    
+    .tooltip {
+        width: 250px;
+    }
 } 
