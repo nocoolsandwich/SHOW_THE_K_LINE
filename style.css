@@ -140,6 +140,8 @@ header p {
 .processed-text {
     line-height: 1.8;
     font-size: 1.1rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
 .stock-highlight {
@@ -450,9 +452,4 @@ header p {
 .status-value.success {
     background: #d4edda;
     color: #155724;
-}
-
-.status-value.error {
-    background: #f8d7da;
-    color: #721c24;
 } 

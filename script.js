@@ -387,7 +387,7 @@ async function highlightStocks(text) {
         '亚马逊': { symbol: 'AMZN', name: 'Amazon', ts_code: 'AMZN.US' },
         'Constellation': { symbol: 'CEG', name: 'Constellation Energy', ts_code: 'CEG.US' },
         '王子新材': { symbol: '002735', name: '王子新材', ts_code: '002735.SZ' },
-    };
+    }
 
     // 合并额外的股票数据到映射中
     for (const [key, value] of Object.entries(additionalStocks)) {
@@ -465,18 +465,23 @@ async function highlightStocks(text) {
         b[1].match.length - a[1].match.length
     );
 
-    // 替换文本中的股票为高亮链接
-    for (const [stockKey, stockData] of sortedStocks) {
-        const { info, match } = stockData;
-        
-        // 使用更简单的替换模式
-        const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}">${info.name}(${info.symbol})</span>`;
-        
-        // 直接替换匹配的文本
-        processedText = processedText.replace(match, replacement);
-    }
+    // 将文本按行分割
+    const lines = text.split('\n');
+    
+    // 处理每一行
+    const processedLines = lines.map(line => {
+        let processedLine = line;
+        // 替换当前行中的股票
+        for (const [stockKey, stockData] of sortedStocks) {
+            const { info, match } = stockData;
+            const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}">${info.name}(${info.symbol})</span>`;
+            processedLine = processedLine.replace(match, replacement);
+        }
+        return processedLine;
+    });
 
-    return processedText;
+    // 重新组合文本，保持原始换行
+    return processedLines.join('\n');
 }
 
 // 转义正则表达式特殊字符
