@@ -365,9 +365,33 @@ header p {
 }
 
 .chart-btn.active {
-    background: #667eea;
+    background-color: #4a5568;
     color: white;
-    border-color: #667eea;
+}
+
+.xueqiu-btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    background-color: #1B9AF7;
+    color: white;
+    margin-left: 10px;
+}
+
+.xueqiu-btn:hover {
+    background-color: #0D8BE0;
+    color: white;
+    text-decoration: none;
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+    .xueqiu-btn {
+        margin-left: 0;
+        margin-top: 10px;
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 .loading {

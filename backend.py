@@ -280,9 +280,9 @@ def get_daily_data(stock_code):
             return jsonify({'error': f'未找到股票代码: {stock_code}'}), 404
         
         # 获取参数
-        days = request.args.get('days', 30, type=int)
+        days = request.args.get('days', 60, type=int)  # 默认获取60天数据（约两个月）
         end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=days+10)).strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=days+30)).strftime('%Y%m%d')  # 多获取30天以应对节假日
         
         print(f"获取股票 {ts_code} 的日K线数据，时间范围: {start_date} - {end_date}")
         

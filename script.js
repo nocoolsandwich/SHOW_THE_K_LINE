@@ -529,12 +529,19 @@ function displayProcessedText(html) {
 // 显示股票信息弹窗（点击时）
 async function showStockModal(stockCode, stockName) {
     const modal = document.getElementById('stockModal');
-    const stockNameEl = document.getElementById('stockName');
-    const stockCodeEl = document.getElementById('stockCode');
-    
-    stockNameEl.textContent = stockName;
-    stockCodeEl.textContent = stockCode;
-    
+    const stockNameElement = document.getElementById('stockName');
+    const stockCodeElement = document.getElementById('stockCode');
+    const xueqiuLink = document.getElementById('xueqiuLink');
+
+    // 更新标题和代码
+    stockNameElement.textContent = stockName || '加载中...';
+    stockCodeElement.textContent = stockCode;
+
+    // 更新雪球链接
+    const market = stockCode.startsWith('6') ? 'SH' : 'SZ';
+    xueqiuLink.href = `https://xueqiu.com/S/${market}${stockCode}`;
+
+    // 显示模态框
     modal.style.display = 'block';
     
     // 加载股票数据
@@ -631,29 +638,71 @@ function drawStockChart(data, type = 'daily') {
         const dates = data.map(d => d.date);
         const values = data.map(d => [d.open, d.close, d.low, d.high]);
         
+        // 计算每个K线的涨跌幅
+        const changePercents = values.map((value, index) => {
+            if (index === 0) {
+                // 第一个数据点，使用开盘价作为基准
+                return ((value[1] - value[0]) / value[0] * 100).toFixed(2);
+            } else {
+                // 使用前一天收盘价作为基准
+                const prevClose = values[index - 1][1];
+                return ((value[1] - prevClose) / prevClose * 100).toFixed(2);
+            }
+        });
+        
         option = {
             tooltip: {
                 trigger: 'axis',
                 axisPointer: {
                     type: 'cross'
+                },
+                formatter: function(params) {
+                    const data = params[0].data;
+                    const changePercent = changePercents[params[0].dataIndex];
+                    const color = parseFloat(changePercent) >= 0 ? '#ff333a' : '#00aa3b';
+                    return `
+                        <div style="font-size: 14px; padding: 4px 8px;">
+                            <div style="margin-bottom: 8px;">${params[0].name}</div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>开盘：</span>
+                                <span style="color: ${data[0] >= data[1] ? '#00aa3b' : '#ff333a'}">${data[0]}</span>
+        </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>收盘：</span>
+                                <span style="color: ${data[1] >= data[0] ? '#ff333a' : '#00aa3b'}">${data[1]}</span>
+                </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>最低：</span>
+                                <span style="color: #00aa3b">${data[2]}</span>
+                </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>最高：</span>
+                                <span style="color: #ff333a">${data[3]}</span>
+            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px;">
+                                <span>涨跌幅：</span>
+                                <span style="color: ${color}">${changePercent}%</span>
+            </div>
+        </div>
+    `;
                 }
             },
-            grid: {
+        grid: {
                 left: '10%',
                 right: '10%',
                 bottom: '15%'
-            },
-            xAxis: {
-                type: 'category',
-                data: dates,
-                scale: true,
+        },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            scale: true,
                 boundaryGap: false,
                 axisLine: { onZero: false },
                 splitLine: { show: false },
                 min: 'dataMin',
                 max: 'dataMax'
-            },
-            yAxis: {
+        },
+        yAxis: {
                 scale: true,
                 splitArea: {
                     show: true
@@ -671,20 +720,20 @@ function drawStockChart(data, type = 'daily') {
                     bottom: '5%'
                 }
             ],
-            series: [
-                {
+        series: [
+            {
                     name: 'K线',
-                    type: 'candlestick',
-                    data: values,
-                    itemStyle: {
+                type: 'candlestick',
+                data: values,
+                itemStyle: {
                         color: '#ff333a',     // 涨的颜色（红色）
                         color0: '#00aa3b',    // 跌的颜色（绿色）
                         borderColor: '#ff333a',
                         borderColor0: '#00aa3b'
-                    }
                 }
-            ]
-        };
+            }
+        ]
+    };
     } else {
         // 准备分时数据
         const times = data.map(d => d.time);
@@ -692,45 +741,45 @@ function drawStockChart(data, type = 'daily') {
         const basePrice = prices[0]; // 第一个价格作为基准价
         
         option = {
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross'
-                }
-            },
-            grid: {
-                left: '10%',
-                right: '10%',
-                bottom: '15%'
-            },
-            xAxis: {
-                type: 'category',
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'cross'
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%'
+        },
+        xAxis: {
+            type: 'category',
                 data: times,
-                scale: true,
-                boundaryGap: false,
-                axisLine: { onZero: false },
+            scale: true,
+            boundaryGap: false,
+            axisLine: { onZero: false },
                 splitLine: { show: false }
+        },
+        yAxis: {
+            scale: true,
+            splitArea: {
+                show: true
+            }
+        },
+        dataZoom: [
+            {
+                type: 'inside',
+                start: 0,
+                end: 100
             },
-            yAxis: {
-                scale: true,
-                splitArea: {
-                    show: true
-                }
-            },
-            dataZoom: [
-                {
-                    type: 'inside',
-                    start: 0,
-                    end: 100
-                },
-                {
-                    show: true,
-                    type: 'slider',
-                    bottom: '5%'
-                }
-            ],
-            series: [
-                {
+            {
+                show: true,
+                type: 'slider',
+                bottom: '5%'
+            }
+        ],
+        series: [
+            {
                     name: '分时',
                     type: 'line',
                     data: prices,
@@ -755,10 +804,10 @@ function drawStockChart(data, type = 'daily') {
                                 color: 'rgba(255, 51, 58, 0)'   // 完全透明
                             }]
                         }
-                    }
                 }
-            ]
-        };
+            }
+        ]
+    };
     }
     
     // 使用配置项显示图表
@@ -767,7 +816,7 @@ function drawStockChart(data, type = 'daily') {
     // 响应窗口大小变化
     window.addEventListener('resize', function() {
         if (currentChart) {
-            currentChart.resize();
+        currentChart.resize();
         }
     });
 }
