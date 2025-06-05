@@ -369,128 +369,106 @@ async function processText() {
     }
 }
 
-// 使用真实股票数据识别并高亮股票
+// 获取股票最新行情
+async function getLatestQuote(stockCode) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/latest_quote/${stockCode}`, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache',
+            headers: {
+                'Accept': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`获取股票${stockCode}行情失败:`, error);
+        return null;
+    }
+    }
+
+// 修改高亮股票的函数
 async function highlightStocks(text) {
-    const stocksFound = new Map(); // 使用Map避免重复
-    let processedText = text;
-
-    console.log('开始识别股票，共有', Object.keys(stockMappings).length, '个股票映射');
-
-    // 手动添加一些常见公司名称（特别是核电和科技相关公司）
-    const additionalStocks = {
-        '国光电气': { symbol: '300447', name: '国光电气', ts_code: '300447.SZ' },
-        '合锻智能': { symbol: '603011', name: '合锻智能', ts_code: '603011.SH' },
-        '联创光电': { symbol: '600363', name: '联创光电', ts_code: '600363.SH' },
-        '西部超导': { symbol: '688122', name: '西部超导', ts_code: '688122.SH' },
-        '安泰科技': { symbol: '000969', name: '安泰科技', ts_code: '000969.SZ' },
-        '万里石': { symbol: '002785', name: '万里石', ts_code: '002785.SZ' },
-        '锡装股份': { symbol: '301093', name: '锡装股份', ts_code: '301093.SZ' },
-        '保变电气': { symbol: '600550', name: '保变电气', ts_code: '600550.SH' },
-        '精达股份': { symbol: '600577', name: '精达股份', ts_code: '600577.SH' },
-        '永鼎股份': { symbol: '600105', name: '永鼎股份', ts_code: '600105.SH' },
-        '中钨高新': { symbol: '000657', name: '中钨高新', ts_code: '000657.SZ' },
-        '应流股份': { symbol: '603308', name: '应流股份', ts_code: '603308.SH' },
-        '中核': { symbol: '000777', name: '中核科技', ts_code: '000777.SZ' },
-        '中广核': { symbol: '003816', name: '中广核技', ts_code: '003816.SZ' },
-        'META': { symbol: 'META', name: 'Meta Platforms', ts_code: 'META.US' },
-        '微软': { symbol: 'MSFT', name: 'Microsoft', ts_code: 'MSFT.US' },
-        '亚马逊': { symbol: 'AMZN', name: 'Amazon', ts_code: 'AMZN.US' },
-        'Constellation': { symbol: 'CEG', name: 'Constellation Energy', ts_code: 'CEG.US' },
-        '王子新材': { symbol: '002735', name: '王子新材', ts_code: '002735.SZ' },
+    if (!stockDataLoaded) {
+        console.warn('股票数据未加载，无法高亮显示');
+        return text;
     }
 
-    // 合并额外的股票数据到映射中
-    for (const [key, value] of Object.entries(additionalStocks)) {
-        if (!stockMappings[key]) {
-            stockMappings[key] = value;
+    // 将文本分割成行来处理
+    let lines = text.split('\n');
+
+    // 用于存储所有股票的行情数据
+    const quoteData = {};
+    const stocksToProcess = new Set();
+            
+    // 第一步：收集所有需要处理的股票
+    for (const key in stockMappings) {
+        if (text.includes(key)) {
+            stocksToProcess.add(key);
         }
     }
 
-    // 按照长度排序，先匹配长的词汇，避免短词汇覆盖长词汇
-    const allStockKeys = Object.keys(stockMappings).sort((a, b) => b.length - a.length);
-
-    // 首先处理所有中文股票名称
-    for (const stockKey of allStockKeys) {
-        if (/[\u4e00-\u9fa5]/.test(stockKey)) {
-            const stockInfo = stockMappings[stockKey];
-            const escapedKey = escapeRegExp(stockKey);
-            
-            // 使用更精确的匹配模式
-            const pattern = new RegExp(escapedKey, 'g');
-            const matches = text.match(pattern);
-            
-            if (matches) {
-                matches.forEach(match => {
-                    if (!stocksFound.has(match)) {
-                        stocksFound.set(match, {
-                            key: stockKey,
-                            info: stockInfo,
-                            match: match
-                        });
-                    }
-                });
+    // 第二步：获取所有股票的行情数据
+    // 为了提高性能，我们并行获取所有股票的行情数据
+    if (stocksToProcess.size > 0) {
+        const stockPromises = Array.from(stocksToProcess).map(async (stock) => {
+            const stockInfo = stockMappings[stock];
+            if (stockInfo) {
+                try {
+                    const quote = await getLatestQuote(stockInfo.symbol);
+                    if (quote) {
+                        quoteData[stock] = quote;
             }
-        }
-    }
-
-    // 然后处理其他类型的股票代码
-    for (const stockKey of allStockKeys) {
-        if (!/[\u4e00-\u9fa5]/.test(stockKey)) {
-            const stockInfo = stockMappings[stockKey];
-            let patterns = [];
-            
-            // 匹配6位数字股票代码
-            if (/^\d{6}$/.test(stockKey)) {
-                patterns.push(new RegExp(`(?<!\\d)${escapeRegExp(stockKey)}(?!\\d)`, 'g'));
-            }
-            // 匹配带括号的股票代码
-            patterns.push(new RegExp(`\\(${escapeRegExp(stockKey)}\\)`, 'g'));
-            // 匹配英文股票代码
-            if (/^[A-Z]+$/.test(stockKey)) {
-                patterns.push(new RegExp(`(?<![A-Za-z])${escapeRegExp(stockKey)}(?![A-Za-z])`, 'g'));
-            }
-
-            for (const pattern of patterns) {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        const cleanMatch = match.replace(/[()]/g, '');
-                        if (!stocksFound.has(cleanMatch)) {
-                            stocksFound.set(cleanMatch, {
-                                key: stockKey,
-                                info: stockInfo,
-                                match: match
-                            });
-                        }
-                    });
+                } catch (error) {
+                    console.error(`获取${stock}行情失败:`, error);
                 }
             }
-        }
+        });
+
+        // 等待所有请求完成
+        await Promise.all(stockPromises);
     }
 
-    console.log('识别到的股票:', Array.from(stocksFound.keys()));
-
-    // 按照匹配长度排序，先替换长的匹配项
-    const sortedStocks = Array.from(stocksFound.entries()).sort((a, b) => 
-        b[1].match.length - a[1].match.length
-    );
-
-    // 将文本按行分割
-    const lines = text.split('\n');
-    
-    // 处理每一行
+    // 第三步：处理每一行文本
     const processedLines = lines.map(line => {
         let processedLine = line;
-        // 替换当前行中的股票
-        for (const [stockKey, stockData] of sortedStocks) {
-            const { info, match } = stockData;
-            const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}" onclick="handleStockClick(this)">${info.name}(${info.symbol})</span>`;
-            processedLine = processedLine.replace(match, replacement);
+
+        // 按长度排序处理股票，避免短名称替换长名称的一部分
+        const stocksInLine = Array.from(stocksToProcess)
+            .filter(stock => line.includes(stock))
+            .sort((a, b) => b.length - a.length);
+
+        for (const stock of stocksInLine) {
+            const stockInfo = stockMappings[stock];
+            const quote = quoteData[stock];
+            
+            let changeText = '';
+            if (quote) {
+                const pctChg = quote.pct_chg;
+                const changeClass = pctChg >= 0 ? 'stock-up' : 'stock-down';
+                changeText = `<span class="stock-change ${changeClass}">${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}%</span>`;
+            }
+
+            const replacement = `<span class="stock-highlight" onclick="handleStockClick(this)" 
+                                    data-code="${stockInfo.symbol}" 
+                                    data-name="${stockInfo.name}">
+                                    ${stock}${changeText}
+                               </span>`;
+
+            // 使用字符串分割和拼接的方式进行替换，避免正则表达式的问题
+            const parts = processedLine.split(stock);
+            processedLine = parts.join(replacement);
         }
+        
         return processedLine;
     });
 
-    // 重新组合文本，保持原始换行
     return processedLines.join('\n');
 }
 
@@ -519,8 +497,8 @@ function displayProcessedText(html) {
         
         // 点击事件（备用）
         element.addEventListener('click', (e) => {
-            const stockCode = e.target.getAttribute('data-stock-code');
-            const stockName = e.target.getAttribute('data-stock-name');
+            const stockCode = e.target.getAttribute('data-code');
+            const stockName = e.target.getAttribute('data-name');
             showStockModal(stockCode, stockName);
         });
     });
@@ -626,8 +604,8 @@ function drawStockChart(data, type = 'daily') {
     // 销毁之前的图表
     if (currentChart) {
         currentChart.dispose();
-    }
-    
+}
+
     // 初始化ECharts实例
     currentChart = echarts.init(chartDom);
     
@@ -647,7 +625,7 @@ function drawStockChart(data, type = 'daily') {
                 // 使用前一天收盘价作为基准
                 const prevClose = values[index - 1][1];
                 return ((value[1] - prevClose) / prevClose * 100).toFixed(2);
-            }
+    }
         });
         
         option = {
@@ -841,8 +819,8 @@ function showLoading(show) {
 
 // 处理股票点击
 function handleStockClick(element) {
-    const stockCode = element.getAttribute('data-stock-code');
-    const stockName = element.getAttribute('data-stock-name');
+    const stockCode = element.getAttribute('data-code');
+    const stockName = element.getAttribute('data-name');
     showStockModal(stockCode, stockName);
 }
 

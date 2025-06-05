@@ -38,6 +38,8 @@ class StockDataCache:
     def __init__(self):
         self.stock_list = None
         self.stock_dict = {}  # 股票代码映射字典
+        self.daily_quotes = None  # 每日行情数据缓存
+        self.last_quote_update = None  # 最后更新行情的时间
         self.load_stock_list_cache()
     
     def is_cache_valid(self, file_path):
@@ -166,6 +168,97 @@ class StockDataCache:
             }
         
         return mappings
+    
+    def update_daily_quotes(self):
+        """更新每日行情数据"""
+        try:
+            # 获取当前日期
+            current_date = datetime.now()
+            
+            # 如果已经有缓存且是今天的数据，直接返回
+            if (self.daily_quotes is not None and 
+                self.last_quote_update is not None and 
+                self.last_quote_update.date() == current_date.date()):
+                print("使用缓存的行情数据")
+                return True
+            
+            # 获取最近的交易日期
+            today_str = current_date.strftime('%Y%m%d')
+            print(f"获取截至 {today_str} 的最近交易日数据...")
+            
+            # 获取最近交易日历
+            trade_cal = pro.trade_cal(
+                exchange='SSE',
+                start_date=(current_date - timedelta(days=10)).strftime('%Y%m%d'),
+                end_date=today_str,
+                fields='cal_date,is_open,pretrade_date'
+            )
+            
+            # 获取最近的交易日
+            latest_trade_date = None
+            for _, row in trade_cal.sort_values('cal_date', ascending=False).iterrows():
+                if row['is_open'] == 1:
+                    latest_trade_date = row['cal_date']
+                    break
+            
+            if not latest_trade_date:
+                print("未找到最近的交易日")
+                return False
+                
+            print(f"获取 {latest_trade_date} 的行情数据...")
+            
+            # 使用trade_date参数获取行情数据
+            df = pro.daily(trade_date=latest_trade_date)
+            print(f"获取到数据: {len(df) if df is not None else 0} 条记录")
+            
+            if df is not None and not df.empty:
+                # 打印一些数据样本以验证
+                print("数据样本:")
+                print(df.head())
+                
+                # 将数据转换为以ts_code为索引的字典
+                self.daily_quotes = df.set_index('ts_code').to_dict('index')
+                self.last_quote_update = current_date
+                
+                # 验证缓存的数据
+                print(f"成功缓存 {len(self.daily_quotes)} 只股票的行情数据")
+                sample_stock = next(iter(self.daily_quotes))
+                print(f"样本数据 ({sample_stock}):", self.daily_quotes[sample_stock])
+                
+                return True
+            else:
+                print("获取行情数据失败：返回数据为空")
+                return False
+                
+        except Exception as e:
+            print(f"获取行情数据失败: {e}")
+            import traceback
+            print("错误详情:", traceback.format_exc())
+            return False
+    
+    def get_stock_quote(self, ts_code):
+        """获取股票行情数据"""
+        try:
+            # 确保行情数据是最新的
+            self.update_daily_quotes()
+            
+            # 从缓存中获取数据
+            if self.daily_quotes and ts_code in self.daily_quotes:
+                quote = self.daily_quotes[ts_code]
+                return {
+                    'code': ts_code.split('.')[0],
+                    'ts_code': ts_code,
+                    'trade_date': quote['trade_date'],
+                    'close': quote['close'],
+                    'pre_close': quote['pre_close'],
+                    'change': quote['change'],
+                    'pct_chg': quote['pct_chg']
+                }
+            return None
+            
+        except Exception as e:
+            print(f"获取股票 {ts_code} 行情失败: {e}")
+            return None
 
 # 创建缓存实例
 cache = StockDataCache()
@@ -493,6 +586,31 @@ def get_intraday_data(stock_code):
         error_response = jsonify({'error': str(e)})
         error_response.headers.add('Access-Control-Allow-Origin', '*')
         return error_response, 500
+
+@app.route('/api/latest_quote/<stock_code>', methods=['GET', 'OPTIONS'])
+def get_latest_quote(stock_code):
+    """获取股票最新行情数据"""
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        print(f"获取股票 {stock_code} 的最新行情...")
+        
+        # 获取标准TS代码
+        ts_code = cache.get_stock_ts_code(stock_code)
+        if not ts_code:
+            return jsonify({'error': '无效的股票代码'}), 400
+            
+        # 从缓存中获取行情数据
+        quote = cache.get_stock_quote(ts_code)
+        if not quote:
+            return jsonify({'error': '未找到股票数据'}), 404
+            
+        return jsonify(quote)
+        
+    except Exception as e:
+        print(f"获取最新行情失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("启动Tushare股票数据API服务...")
