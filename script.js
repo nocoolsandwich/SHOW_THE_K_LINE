@@ -633,14 +633,29 @@ function positionTooltip(tooltip, element) {
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
     
     let left = rect.left + scrollLeft + rect.width / 2 - 175; // 居中对齐
-    let top = rect.bottom + scrollTop + 10; // 在元素下方
+    let top;
     
-    // 边界检查
+    // 计算元素在视口中的位置
+    const elementTop = rect.top;
+    const elementBottom = rect.bottom;
+    const viewportHeight = window.innerHeight;
+    const tooltipHeight = 250; // 预估tooltip高度
+    
+    // 优先显示在元素上方
+    if (elementTop > tooltipHeight + 20) {
+        // 如果元素上方有足够空间，显示在上方
+        top = elementTop + scrollTop - tooltipHeight - 10;
+    } else if (viewportHeight - elementBottom > tooltipHeight + 20) {
+        // 如果元素下方有足够空间，显示在下方
+        top = elementBottom + scrollTop + 10;
+    } else {
+        // 如果上下空间都不够，显示在元素上方，但确保不超出视口顶部
+        top = Math.max(10, elementTop + scrollTop - tooltipHeight - 10);
+    }
+    
+    // 水平方向边界检查
     if (left < 10) left = 10;
     if (left + 350 > window.innerWidth) left = window.innerWidth - 360;
-    if (top + 200 > window.innerHeight + scrollTop) {
-        top = rect.top + scrollTop - 210; // 在元素上方
-    }
     
     tooltip.style.left = left + 'px';
     tooltip.style.top = top + 'px';
