@@ -5,8 +5,6 @@ let stockNames = [];
 let stockDataLoaded = false;
 
 let currentChart = null;
-let hoverTimeout = null;
-let currentHoverElement = null;
 
 // 动态获取API基础URL
 const API_BASE_URL = getAPIBaseURL();
@@ -486,7 +484,7 @@ async function highlightStocks(text) {
         // 替换当前行中的股票
         for (const [stockKey, stockData] of sortedStocks) {
             const { info, match } = stockData;
-            const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}">${info.name}(${info.symbol})</span>`;
+            const replacement = `<span class="stock-highlight" data-stock-code="${info.symbol}" data-stock-name="${info.name}" data-ts-code="${info.ts_code}" onclick="handleStockClick(this)">${info.name}(${info.symbol})</span>`;
             processedLine = processedLine.replace(match, replacement);
         }
         return processedLine;
@@ -528,292 +526,6 @@ function displayProcessedText(html) {
     });
 }
 
-// 处理股票悬停
-function handleStockHover(element) {
-    // 清除之前的超时
-    if (hoverTimeout) {
-        clearTimeout(hoverTimeout);
-    }
-    
-    currentHoverElement = element;
-    
-    // 设置延迟，避免鼠标快速移动时频繁触发
-    hoverTimeout = setTimeout(() => {
-        if (currentHoverElement === element) {
-            const stockCode = element.getAttribute('data-stock-code');
-            const stockName = element.getAttribute('data-stock-name');
-            showStockTooltip(element, stockCode, stockName);
-        }
-    }, 500); // 500ms延迟
-}
-
-// 处理股票悬停离开
-function handleStockLeave() {
-    // 清除超时
-    if (hoverTimeout) {
-        clearTimeout(hoverTimeout);
-        hoverTimeout = null;
-    }
-    
-    // 延迟隐藏tooltip，给用户时间移动到tooltip上
-    setTimeout(() => {
-        const tooltip = document.getElementById('stock-tooltip');
-        if (tooltip && !tooltip.matches(':hover') && !currentHoverElement) {
-            hideStockTooltip();
-        }
-    }, 300);
-}
-
-// 显示股票提示框
-async function showStockTooltip(element, stockCode, stockName) {
-    try {
-        // 检查是否已存在tooltip
-        let tooltip = document.getElementById('stock-tooltip');
-        if (!tooltip) {
-            tooltip = createStockTooltip();
-        }
-        
-        // 显示加载状态
-        tooltip.innerHTML = `
-            <div class="tooltip-header">
-                <h3>${stockName}</h3>
-                <p>${stockCode}</p>
-            </div>
-            <div class="tooltip-body">
-                <div class="loading-small">
-                    <div class="spinner-small"></div>
-                    <p>加载中...</p>
-                </div>
-            </div>
-        `;
-        
-        // 定位tooltip
-        positionTooltip(tooltip, element);
-        tooltip.style.display = 'block';
-        
-        // 获取股票数据
-        const stockData = await fetchStockData(stockCode);
-        
-        // 更新tooltip内容
-        if (stockData && currentHoverElement === element) {
-            updateTooltipContent(tooltip, stockName, stockCode, stockData);
-        }
-        
-    } catch (error) {
-        console.error('显示股票提示框失败:', error);
-    }
-}
-
-// 创建股票提示框
-function createStockTooltip() {
-    const tooltip = document.createElement('div');
-    tooltip.id = 'stock-tooltip';
-    tooltip.className = 'stock-tooltip';
-    tooltip.style.cssText = `
-        position: absolute;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-        padding: 0;
-        z-index: 1000;
-        max-width: 400px;
-        width: 350px;
-        display: none;
-        font-size: 14px;
-        border: 1px solid #e2e8f0;
-    `;
-    
-    // 添加鼠标事件，保持tooltip显示
-    tooltip.addEventListener('mouseenter', () => {
-        if (hoverTimeout) {
-            clearTimeout(hoverTimeout);
-        }
-    });
-    
-    tooltip.addEventListener('mouseleave', () => {
-        currentHoverElement = null;
-        setTimeout(() => {
-            if (!tooltip.matches(':hover')) {
-                hideStockTooltip();
-            }
-        }, 300);
-    });
-    
-    document.body.appendChild(tooltip);
-    return tooltip;
-}
-
-// 定位提示框
-function positionTooltip(tooltip, element) {
-    const rect = element.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    
-    let left = rect.left + scrollLeft + rect.width / 2 - 175; // 居中对齐
-    let top;
-    
-    // 计算元素在视口中的位置
-    const elementTop = rect.top;
-    const elementBottom = rect.bottom;
-    const viewportHeight = window.innerHeight;
-    const tooltipHeight = 250; // 预估tooltip高度
-    
-    // 优先显示在元素上方
-    if (elementTop > tooltipHeight + 20) {
-        // 如果元素上方有足够空间，显示在上方
-        top = elementTop + scrollTop - tooltipHeight - 10;
-    } else if (viewportHeight - elementBottom > tooltipHeight + 20) {
-        // 如果元素下方有足够空间，显示在下方
-        top = elementBottom + scrollTop + 10;
-    } else {
-        // 如果上下空间都不够，显示在元素上方，但确保不超出视口顶部
-        top = Math.max(10, elementTop + scrollTop - tooltipHeight - 10);
-    }
-    
-    // 水平方向边界检查
-    if (left < 10) left = 10;
-    if (left + 350 > window.innerWidth) left = window.innerWidth - 360;
-    
-    tooltip.style.left = left + 'px';
-    tooltip.style.top = top + 'px';
-}
-
-// 隐藏股票提示框
-function hideStockTooltip() {
-    const tooltip = document.getElementById('stock-tooltip');
-    if (tooltip) {
-        tooltip.style.display = 'none';
-    }
-}
-
-// 获取股票数据
-async function fetchStockData(stockCode, type = 'daily') {
-    try {
-        const endpoint = type === 'daily' ? 'daily_data' : 'intraday_data';
-        const response = await fetch(`${API_BASE_URL}/${endpoint}/${stockCode}`, {
-            method: 'GET',
-            mode: 'cors',
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        return data;
-        
-    } catch (error) {
-        console.error('获取股票数据失败:', error);
-        return null;
-    }
-}
-
-// 更新提示框内容
-function updateTooltipContent(tooltip, stockName, stockCode, stockData) {
-    const changeColor = stockData.change_percent >= 0 ? '#22c55e' : '#ef4444';
-    const changeSign = stockData.change_percent >= 0 ? '+' : '';
-    
-    tooltip.innerHTML = `
-        <div class="tooltip-header" style="background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 15px; border-radius: 10px 10px 0 0;">
-            <h3 style="margin: 0; font-size: 16px;">${stockName}</h3>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">${stockCode}</p>
-        </div>
-        <div class="tooltip-body" style="padding: 15px;">
-            <div class="stock-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                <div class="info-item" style="background: #f7fafc; padding: 8px; border-radius: 5px;">
-                    <span style="font-size: 12px; color: #666;">当前价格</span><br>
-                    <span style="font-weight: bold; color: #333;">¥${stockData.current_price}</span>
-                </div>
-                <div class="info-item" style="background: #f7fafc; padding: 8px; border-radius: 5px;">
-                    <span style="font-size: 12px; color: #666;">涨跌幅</span><br>
-                    <span style="font-weight: bold; color: ${changeColor};">${changeSign}${stockData.change_percent}%</span>
-                </div>
-            </div>
-            <div class="mini-chart" style="height: 100px; position: relative;">
-                <div id="tooltip-chart" style="width: 320px; height: 100px;"></div>
-            </div>
-            <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
-                点击查看完整信息
-            </div>
-        </div>
-    `;
-    
-    // 绘制迷你图表
-    setTimeout(() => {
-        drawMiniChart(stockData.chart_data);
-    }, 50);
-}
-
-// 绘制迷你图表
-function drawMiniChart(chartData) {
-    const chartDom = document.getElementById('tooltip-chart');
-    if (!chartDom || !chartData || chartData.length === 0) return;
-    
-    // 初始化ECharts实例
-    const chart = echarts.init(chartDom);
-    
-    // 准备数据
-    const dates = chartData.map(d => d.date);
-    const values = chartData.map(d => [d.open, d.close, d.low, d.high]);
-    
-    // 配置项
-    const option = {
-        animation: false,
-        grid: {
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0
-        },
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: {
-                type: 'cross'
-            },
-            formatter: function(params) {
-                const data = params[0].data;
-                return `日期：${params[0].axisValue}<br/>
-                        开盘：${data[0]}<br/>
-                        收盘：${data[1]}<br/>
-                        最低：${data[2]}<br/>
-                        最高：${data[3]}`;
-            }
-        },
-        xAxis: {
-            type: 'category',
-            data: dates,
-            show: false,
-            scale: true,
-            boundaryGap: false
-        },
-        yAxis: {
-            type: 'value',
-            show: false,
-            scale: true
-        },
-        series: [
-            {
-                type: 'candlestick',
-                data: values,
-                itemStyle: {
-                    color: '#ec0000',
-                    color0: '#00da3c',
-                    borderColor: '#8A0000',
-                    borderColor0: '#008F28'
-                }
-            }
-        ]
-    };
-    
-    // 使用配置项显示图表
-    chart.setOption(option);
-    
-    // 响应窗口大小变化
-    window.addEventListener('resize', function() {
-        chart.resize();
-    });
-}
-
 // 显示股票信息弹窗（点击时）
 async function showStockModal(stockCode, stockName) {
     const modal = document.getElementById('stockModal');
@@ -824,9 +536,6 @@ async function showStockModal(stockCode, stockName) {
     stockCodeEl.textContent = stockCode;
     
     modal.style.display = 'block';
-    
-    // 隐藏tooltip
-    hideStockTooltip();
     
     // 加载股票数据
     await loadStockDataForModal(stockCode);
@@ -849,12 +558,15 @@ async function loadStockDataForModal(stockCode) {
         
         // 更新股票信息
         document.getElementById('currentPrice').textContent = `¥${stockData.current_price}`;
-        document.getElementById('changePercent').textContent = `${stockData.change_percent > 0 ? '+' : ''}${stockData.change_percent}%`;
-        document.getElementById('volume').textContent = stockData.volume.toLocaleString();
         
-        // 设置涨跌颜色
+        // 更新涨跌幅并设置样式
         const changeEl = document.getElementById('changePercent');
-        changeEl.style.color = stockData.change_percent >= 0 ? '#22c55e' : '#ef4444';
+        changeEl.textContent = `${stockData.change_percent > 0 ? '+' : ''}${stockData.change_percent}%`;
+        
+        // 使用类名控制颜色
+        changeEl.className = 'value ' + (stockData.change_percent >= 0 ? 'up' : 'down');
+        
+        document.getElementById('volume').textContent = stockData.volume.toLocaleString();
         
         // 绘制K线图
         drawStockChart(stockData.chart_data, 'daily');
@@ -965,10 +677,10 @@ function drawStockChart(data, type = 'daily') {
                     type: 'candlestick',
                     data: values,
                     itemStyle: {
-                        color: '#ec0000',
-                        color0: '#00da3c',
-                        borderColor: '#8A0000',
-                        borderColor0: '#008F28'
+                        color: '#ff333a',     // 涨的颜色（红色）
+                        color0: '#00aa3b',    // 跌的颜色（绿色）
+                        borderColor: '#ff333a',
+                        borderColor0: '#00aa3b'
                     }
                 }
             ]
@@ -977,6 +689,7 @@ function drawStockChart(data, type = 'daily') {
         // 准备分时数据
         const times = data.map(d => d.time);
         const prices = data.map(d => d.price);
+        const basePrice = prices[0]; // 第一个价格作为基准价
         
         option = {
             tooltip: {
@@ -1024,10 +737,24 @@ function drawStockChart(data, type = 'daily') {
                     smooth: true,
                     showSymbol: false,
                     lineStyle: {
-                        width: 1
+                        width: 1,
+                        color: '#ff333a'  // 分时图线条颜色（红色）
                     },
                     areaStyle: {
-                        opacity: 0.1
+                        color: {
+                            type: 'linear',
+                            x: 0,
+                            y: 0,
+                            x2: 0,
+                            y2: 1,
+                            colorStops: [{
+                                offset: 0,
+                                color: 'rgba(255, 51, 58, 0.2)'  // 红色半透明
+                            }, {
+                                offset: 1,
+                                color: 'rgba(255, 51, 58, 0)'   // 完全透明
+                            }]
+                        }
                     }
                 }
             ]
@@ -1056,14 +783,38 @@ window.onclick = function(event) {
     if (event.target === modal) {
         modal.style.display = 'none';
     }
-    
-    // 点击其他地方时隐藏tooltip
-    if (!event.target.closest('.stock-highlight') && !event.target.closest('#stock-tooltip')) {
-        hideStockTooltip();
-    }
 }
 
 // 显示/隐藏加载状态
 function showLoading(show) {
     document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+// 处理股票点击
+function handleStockClick(element) {
+    const stockCode = element.getAttribute('data-stock-code');
+    const stockName = element.getAttribute('data-stock-name');
+    showStockModal(stockCode, stockName);
+}
+
+// 获取股票数据
+async function fetchStockData(stockCode, type = 'daily') {
+    try {
+        const endpoint = type === 'daily' ? 'daily_data' : 'intraday_data';
+        const response = await fetch(`${API_BASE_URL}/${endpoint}/${stockCode}`, {
+            method: 'GET',
+            mode: 'cors',
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+        
+    } catch (error) {
+        console.error('获取股票数据失败:', error);
+        return null;
+    }
 } 
