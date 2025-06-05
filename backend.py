@@ -413,6 +413,87 @@ def health_check():
     
     return response
 
+@app.route('/api/intraday_data/<stock_code>', methods=['GET', 'OPTIONS'])
+def get_intraday_data(stock_code):
+    """获取股票分时数据"""
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        ts_code = cache.get_stock_ts_code(stock_code)
+        if not ts_code:
+            return jsonify({'error': f'未找到股票代码: {stock_code}'}), 404
+        
+        # 获取当前日期
+        current_date = datetime.now().strftime('%Y%m%d')
+        
+        print(f"获取股票 {ts_code} 的分时数据，日期: {current_date}")
+        
+        # 调用Tushare API获取分时数据
+        intraday_data = pro.rt_k(ts_code=ts_code)
+        
+        if intraday_data is None or intraday_data.empty:
+            return jsonify({'error': '未获取到数据'}), 404
+        
+        # 打印返回的数据结构，用于调试
+        print("分时数据列：", intraday_data.columns.tolist())
+        print("分时数据样例：", intraday_data.iloc[0].to_dict())
+        
+        # 转换数据格式
+        chart_data = []
+        # 生成当前时间序列
+        current_time = datetime.now()
+        start_time = current_time.replace(hour=9, minute=30, second=0, microsecond=0)
+        times = []
+        
+        # 创建从9:30到15:00的时间点，排除11:30-13:00的休市时间
+        current = start_time
+        while current <= current_time.replace(hour=15, minute=0, second=0):
+            if not (current.hour == 11 and current.minute >= 30) and not (current.hour == 12):
+                times.append(current.strftime("%H:%M"))
+            current = current + timedelta(minutes=1)
+        
+        # 为每个时间点生成一个数据点
+        for i, time_str in enumerate(times):
+            # 模拟价格数据
+            index = min(i, len(intraday_data) - 1)  # 避免索引超出范围
+            row = intraday_data.iloc[index]
+            
+            chart_data.append({
+                'time': time_str,
+                'price': float(row['close']),
+                'volume': int(row['vol']) if pd.notna(row['vol']) else 0,
+                'amount': int(row['amount']) if pd.notna(row['amount']) else 0
+            })
+        
+        # 计算当前价格和涨跌幅
+        if len(chart_data) >= 2:
+            current_price = chart_data[-1]['price']
+            prev_close = float(intraday_data['pre_close'].iloc[0]) if 'pre_close' in intraday_data.columns else chart_data[0]['price']
+            change_percent = ((current_price - prev_close) / prev_close * 100)
+        else:
+            current_price = chart_data[-1]['price'] if chart_data else 0
+            change_percent = 0
+        
+        result = {
+            'current_price': round(current_price, 2),
+            'change_percent': round(change_percent, 2),
+            'volume': chart_data[-1]['volume'] if chart_data else 0,
+            'chart_data': chart_data
+        }
+        
+        response = jsonify(result)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+        
+    except Exception as e:
+        print(f"获取分时数据失败: {e}")
+        import traceback
+        traceback.print_exc()
+        error_response = jsonify({'error': str(e)})
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        return error_response, 500
+
 if __name__ == '__main__':
     print("启动Tushare股票数据API服务...")
     print(f"股票列表缓存状态: {'有效' if cache.stock_list is not None else '无效'}")

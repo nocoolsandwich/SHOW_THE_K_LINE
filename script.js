@@ -675,9 +675,10 @@ function hideStockTooltip() {
 }
 
 // 获取股票数据
-async function fetchStockData(stockCode) {
+async function fetchStockData(stockCode, type = 'daily') {
     try {
-        const response = await fetch(`${API_BASE_URL}/daily_data/${stockCode}?days=30`, {
+        const endpoint = type === 'daily' ? 'daily_data' : 'intraday_data';
+        const response = await fetch(`${API_BASE_URL}/${endpoint}/${stockCode}`, {
             method: 'GET',
             mode: 'cors',
         });
@@ -817,12 +818,15 @@ async function showStockModal(stockCode, stockName) {
     
     // 加载股票数据
     await loadStockDataForModal(stockCode);
+    
+    // 设置图表类型切换事件
+    setupChartTypeSwitching(stockCode);
 }
 
 // 加载股票数据（用于模态框）
 async function loadStockDataForModal(stockCode) {
     try {
-        const stockData = await fetchStockData(stockCode);
+        const stockData = await fetchStockData(stockCode, 'daily');
         
         if (!stockData) {
             document.getElementById('currentPrice').textContent = '数据加载失败';
@@ -841,7 +845,7 @@ async function loadStockDataForModal(stockCode) {
         changeEl.style.color = stockData.change_percent >= 0 ? '#22c55e' : '#ef4444';
         
         // 绘制K线图
-        drawStockChart(stockData.chart_data);
+        drawStockChart(stockData.chart_data, 'daily');
         
     } catch (error) {
         console.error('股票数据加载失败:', error);
@@ -851,8 +855,41 @@ async function loadStockDataForModal(stockCode) {
     }
 }
 
-// 绘制股票K线图
-function drawStockChart(data) {
+// 设置图表类型切换
+function setupChartTypeSwitching(stockCode) {
+    const dailyBtn = document.getElementById('dailyBtn');
+    const intradayBtn = document.getElementById('intradayBtn');
+    
+    // 移除之前的事件监听器
+    dailyBtn.replaceWith(dailyBtn.cloneNode(true));
+    intradayBtn.replaceWith(intradayBtn.cloneNode(true));
+    
+    // 重新获取按钮元素
+    const newDailyBtn = document.getElementById('dailyBtn');
+    const newIntradayBtn = document.getElementById('intradayBtn');
+    
+    // 添加新的事件监听器
+    newDailyBtn.addEventListener('click', async () => {
+        newDailyBtn.classList.add('active');
+        newIntradayBtn.classList.remove('active');
+        const data = await fetchStockData(stockCode, 'daily');
+        if (data) {
+            drawStockChart(data.chart_data, 'daily');
+        }
+    });
+    
+    newIntradayBtn.addEventListener('click', async () => {
+        newIntradayBtn.classList.add('active');
+        newDailyBtn.classList.remove('active');
+        const data = await fetchStockData(stockCode, 'intraday');
+        if (data) {
+            drawStockChart(data.chart_data, 'intraday');
+        }
+    });
+}
+
+// 绘制股票图表
+function drawStockChart(data, type = 'daily') {
     const chartDom = document.getElementById('stockChart');
     
     // 销毁之前的图表
@@ -863,72 +900,136 @@ function drawStockChart(data) {
     // 初始化ECharts实例
     currentChart = echarts.init(chartDom);
     
-    // 准备数据
-    const dates = data.map(d => d.date);
-    const values = data.map(d => [d.open, d.close, d.low, d.high]);
+    let option;
     
-    // 配置项
-    const option = {
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: {
-                type: 'cross'
-            }
-        },
-        grid: {
-            left: '10%',
-            right: '10%',
-            bottom: '15%'
-        },
-        xAxis: {
-            type: 'category',
-            data: dates,
-            scale: true,
-            boundaryGap: false,
-            axisLine: { onZero: false },
-            splitLine: { show: false },
-            min: 'dataMin',
-            max: 'dataMax'
-        },
-        yAxis: {
-            scale: true,
-            splitArea: {
-                show: true
-            }
-        },
-        dataZoom: [
-            {
-                type: 'inside',
-                start: 0,
-                end: 100
-            },
-            {
-                show: true,
-                type: 'slider',
-                bottom: '5%'
-            }
-        ],
-        series: [
-            {
-                name: 'K线',
-                type: 'candlestick',
-                data: values,
-                itemStyle: {
-                    color: '#ec0000',
-                    color0: '#00da3c',
-                    borderColor: '#8A0000',
-                    borderColor0: '#008F28'
+    if (type === 'daily') {
+        // 准备日K数据
+        const dates = data.map(d => d.date);
+        const values = data.map(d => [d.open, d.close, d.low, d.high]);
+        
+        option = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross'
                 }
-            }
-        ]
-    };
+            },
+            grid: {
+                left: '10%',
+                right: '10%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: dates,
+                scale: true,
+                boundaryGap: false,
+                axisLine: { onZero: false },
+                splitLine: { show: false },
+                min: 'dataMin',
+                max: 'dataMax'
+            },
+            yAxis: {
+                scale: true,
+                splitArea: {
+                    show: true
+                }
+            },
+            dataZoom: [
+                {
+                    type: 'inside',
+                    start: 0,
+                    end: 100
+                },
+                {
+                    show: true,
+                    type: 'slider',
+                    bottom: '5%'
+                }
+            ],
+            series: [
+                {
+                    name: 'K线',
+                    type: 'candlestick',
+                    data: values,
+                    itemStyle: {
+                        color: '#ec0000',
+                        color0: '#00da3c',
+                        borderColor: '#8A0000',
+                        borderColor0: '#008F28'
+                    }
+                }
+            ]
+        };
+    } else {
+        // 准备分时数据
+        const times = data.map(d => d.time);
+        const prices = data.map(d => d.price);
+        
+        option = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross'
+                }
+            },
+            grid: {
+                left: '10%',
+                right: '10%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: times,
+                scale: true,
+                boundaryGap: false,
+                axisLine: { onZero: false },
+                splitLine: { show: false }
+            },
+            yAxis: {
+                scale: true,
+                splitArea: {
+                    show: true
+                }
+            },
+            dataZoom: [
+                {
+                    type: 'inside',
+                    start: 0,
+                    end: 100
+                },
+                {
+                    show: true,
+                    type: 'slider',
+                    bottom: '5%'
+                }
+            ],
+            series: [
+                {
+                    name: '分时',
+                    type: 'line',
+                    data: prices,
+                    smooth: true,
+                    showSymbol: false,
+                    lineStyle: {
+                        width: 1
+                    },
+                    areaStyle: {
+                        opacity: 0.1
+                    }
+                }
+            ]
+        };
+    }
     
     // 使用配置项显示图表
     currentChart.setOption(option);
     
     // 响应窗口大小变化
     window.addEventListener('resize', function() {
-        currentChart.resize();
+        if (currentChart) {
+            currentChart.resize();
+        }
     });
 }
 
