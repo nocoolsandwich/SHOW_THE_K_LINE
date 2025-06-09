@@ -172,8 +172,10 @@ class StockDataCache:
     def update_daily_quotes(self):
         """更新每日行情数据"""
         try:
-            # 获取当前日期
+            # 获取当前日期和时间
             current_date = datetime.now()
+            current_time = current_date.time()
+            is_after_market_close = current_time >= datetime.strptime('15:00', '%H:%M').time()
             
             # 如果已经有缓存且是今天的数据，直接返回
             if (self.daily_quotes is not None and 
@@ -196,19 +198,32 @@ class StockDataCache:
             
             # 获取最近的交易日
             latest_trade_date = None
+            previous_trade_date = None
+            
             for _, row in trade_cal.sort_values('cal_date', ascending=False).iterrows():
                 if row['is_open'] == 1:
-                    latest_trade_date = row['cal_date']
-                    break
+                    if latest_trade_date is None:
+                        latest_trade_date = row['cal_date']
+                    elif previous_trade_date is None:
+                        previous_trade_date = row['cal_date']
+                        break
             
             if not latest_trade_date:
                 print("未找到最近的交易日")
                 return False
                 
-            print(f"获取 {latest_trade_date} 的行情数据...")
+            # 如果当前日期是交易日，但未收盘，则使用前一交易日的数据
+            selected_trade_date = latest_trade_date
+            if today_str == latest_trade_date and not is_after_market_close and previous_trade_date:
+                selected_trade_date = previous_trade_date
+                print(f"当前时间 {current_time} 未收盘，使用前一交易日 {selected_trade_date} 的数据")
+            else:
+                print(f"使用最近交易日 {selected_trade_date} 的数据")
+                
+            print(f"获取 {selected_trade_date} 的行情数据...")
             
             # 使用trade_date参数获取行情数据
-            df = pro.daily(trade_date=latest_trade_date)
+            df = pro.daily(trade_date=selected_trade_date)
             print(f"获取到数据: {len(df) if df is not None else 0} 条记录")
             
             if df is not None and not df.empty:
@@ -245,6 +260,8 @@ class StockDataCache:
             # 从缓存中获取数据
             if self.daily_quotes and ts_code in self.daily_quotes:
                 quote = self.daily_quotes[ts_code]
+                
+                # 使用历史数据
                 return {
                     'code': ts_code.split('.')[0],
                     'ts_code': ts_code,
@@ -252,7 +269,9 @@ class StockDataCache:
                     'close': quote['close'],
                     'pre_close': quote['pre_close'],
                     'change': quote['change'],
-                    'pct_chg': quote['pct_chg']
+                    'pct_chg': quote['pct_chg'],
+                    'data_type': 'historical',  # 标记数据来源为历史数据
+                    'data_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # 添加数据获取时间戳
                 }
             return None
             
