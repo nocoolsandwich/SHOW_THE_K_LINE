@@ -10,6 +10,7 @@ from flask_cors import CORS
 import os
 import pickle
 import time
+import easyquotation  # 添加easyquotation库的导入
 
 app = Flask(__name__)
 
@@ -24,6 +25,9 @@ CORS(app,
 TUSHARE_TOKEN = '2876ea85cb005fb5fa17c809a98174f2d5aae8b1f830110a5ead6211'
 ts.set_token(TUSHARE_TOKEN)
 pro = ts.pro_api()
+
+# 创建easyquotation实例，用于获取实时行情
+quotation = easyquotation.use('sina')  # 使用新浪行情
 
 # 缓存配置
 CACHE_DIR = 'cache'
@@ -254,6 +258,56 @@ class StockDataCache:
     def get_stock_quote(self, ts_code):
         """获取股票行情数据"""
         try:
+            # 获取当前时间，判断是否在交易时间内
+            current_date = datetime.now()
+            current_time = current_date.time()
+            is_trading_time = (
+                (current_time >= datetime.strptime('09:30', '%H:%M').time() and
+                 current_time <= datetime.strptime('11:30', '%H:%M').time()) or
+                (current_time >= datetime.strptime('13:00', '%H:%M').time() and
+                 current_time <= datetime.strptime('15:00', '%H:%M').time())
+            )
+            
+            # 如果是交易时间，尝试获取实时数据
+            if is_trading_time:
+                try:
+                    print(f"获取 {ts_code} 的实时行情...")
+                    
+                    # 将ts_code转换为easyquotation使用的格式
+                    market_code = ts_code.split('.')
+                    if len(market_code) == 2:
+                        code = market_code[0]
+                        market = market_code[1].lower()
+                        easy_code = f"{market}{code}"
+                        
+                        # 获取实时行情
+                        market_data = quotation.market_snapshot(prefix=True)
+                        
+                        if easy_code in market_data:
+                            real_time_quote = market_data[easy_code]
+                            print(f"获取到实时行情: {real_time_quote}")
+                            
+                            # 计算实时涨跌幅
+                            current_price = float(real_time_quote['now'])
+                            pre_close = float(real_time_quote['close'])
+                            change = round(current_price - pre_close, 2)
+                            pct_chg = round((change / pre_close * 100), 2)
+                            
+                            return {
+                                'code': ts_code.split('.')[0],
+                                'ts_code': ts_code,
+                                'trade_date': current_date.strftime('%Y%m%d'),
+                                'close': current_price,
+                                'pre_close': pre_close,
+                                'change': change,
+                                'pct_chg': pct_chg,
+                                'data_type': 'realtime',  # 标记数据来源为实时数据
+                                'data_timestamp': current_date.strftime('%Y-%m-%d %H:%M:%S')  # 添加数据获取时间戳
+                            }
+                except Exception as e:
+                    print(f"获取实时行情失败: {e}，将使用历史数据")
+            
+            # 如果不是交易时间或获取实时数据失败，使用历史数据
             # 确保行情数据是最新的
             self.update_daily_quotes()
             
@@ -277,6 +331,8 @@ class StockDataCache:
             
         except Exception as e:
             print(f"获取股票 {ts_code} 行情失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
 # 创建缓存实例
@@ -393,18 +449,73 @@ def get_daily_data(stock_code):
         
         # 获取参数
         days = request.args.get('days', 60, type=int)  # 默认获取60天数据（约两个月）
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=days+30)).strftime('%Y%m%d')  # 多获取30天以应对节假日
+        current_date = datetime.now()
+        end_date = current_date.strftime('%Y%m%d')
+        start_date = (current_date - timedelta(days=days+30)).strftime('%Y%m%d')  # 多获取30天以应对节假日
         
         print(f"获取股票 {ts_code} 的日K线数据，时间范围: {start_date} - {end_date}")
         
-        # 调用Tushare API获取日线数据
+        # 判断是否在交易时间内
+        current_time = current_date.time()
+        is_trading_time = (
+            (current_time >= datetime.strptime('09:30', '%H:%M').time() and
+             current_time <= datetime.strptime('11:30', '%H:%M').time()) or
+            (current_time >= datetime.strptime('13:00', '%H:%M').time() and
+             current_time <= datetime.strptime('15:00', '%H:%M').time())
+        )
+        
+        # 获取历史日K数据
         daily_data = pro.daily(ts_code=ts_code, 
-                              start_date=start_date, 
-                              end_date=end_date)
+                             start_date=start_date, 
+                             end_date=end_date)
         
         if daily_data is None or daily_data.empty:
-            return jsonify({'error': '未获取到数据'}), 404
+            return jsonify({'error': '未获取到历史数据'}), 404
+        
+        # 如果在交易时间内，获取实时数据
+        if is_trading_time:
+            try:
+                print(f"获取 {ts_code} 的实时行情...")
+                
+                # 将ts_code转换为easyquotation使用的格式（去掉.SH/.SZ，改为前缀形式）
+                market_code = ts_code.split('.')
+                if len(market_code) == 2:
+                    code = market_code[0]
+                    market = market_code[1].lower()
+                    easy_code = f"{market}{code}"
+                    
+                    # 获取实时行情
+                    market_data = quotation.market_snapshot(prefix=True)
+                    
+                    if easy_code in market_data:
+                        real_time_quote = market_data[easy_code]
+                        print(f"获取到实时行情: {real_time_quote}")
+                        
+                        # 创建今日实时数据行
+                        today_data = pd.DataFrame([{
+                            'ts_code': ts_code,
+                            'trade_date': current_date.strftime('%Y%m%d'),
+                            'open': float(real_time_quote['open']),
+                            'high': float(real_time_quote['high']),
+                            'low': float(real_time_quote['low']),
+                            'close': float(real_time_quote['now']),  # 当前价格作为收盘价
+                            'pre_close': float(real_time_quote['close']),  # 昨收价
+                            'vol': float(real_time_quote['turnover']),  # 成交量
+                            'amount': float(real_time_quote['volume'])  # 成交额
+                        }])
+                        
+                        # 如果最后一行是今天的数据，替换它；否则添加新行
+                        if len(daily_data) > 0 and daily_data.iloc[-1]['trade_date'] == current_date.strftime('%Y%m%d'):
+                            daily_data = daily_data.iloc[:-1]
+                        daily_data = pd.concat([daily_data, today_data], ignore_index=True)
+                        
+                        print("实时数据合并完成")
+                    else:
+                        print(f"未找到股票 {easy_code} 的实时行情")
+            except Exception as e:
+                print(f"获取实时数据失败: {e}，将只使用历史数据")
+                import traceback
+                traceback.print_exc()
         
         # 按日期排序并取最近的数据
         daily_data = daily_data.sort_values('trade_date').tail(days)
@@ -422,19 +533,21 @@ def get_daily_data(stock_code):
             })
         
         # 计算当前价格和涨跌幅
-        if len(chart_data) >= 2:
+        if len(chart_data) >= 1:
             current_price = chart_data[-1]['close']
-            prev_price = chart_data[-2]['close']
-            change_percent = ((current_price - prev_price) / prev_price * 100)
+            # 使用当日的pre_close计算涨跌幅
+            pre_close = float(daily_data.iloc[-1]['pre_close'])
+            change_percent = ((current_price - pre_close) / pre_close * 100)
         else:
-            current_price = chart_data[-1]['close'] if chart_data else 0
+            current_price = 0
             change_percent = 0
         
         result = {
             'current_price': round(current_price, 2),
             'change_percent': round(change_percent, 2),
             'volume': chart_data[-1]['volume'] if chart_data else 0,
-            'chart_data': chart_data
+            'chart_data': chart_data,
+            'data_type': 'realtime' if is_trading_time else 'historical'
         }
         
         response = jsonify(result)
@@ -443,6 +556,8 @@ def get_daily_data(stock_code):
         
     except Exception as e:
         print(f"获取日K线数据失败: {e}")
+        import traceback
+        traceback.print_exc()
         error_response = jsonify({'error': str(e)})
         error_response.headers.add('Access-Control-Allow-Origin', '*')
         return error_response, 500
