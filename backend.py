@@ -491,11 +491,27 @@ def get_daily_data(stock_code):
                         real_time_quote = market_data[easy_code]
                         print(f"获取到实时行情: {real_time_quote}")
                         
+                        # 获取当前时间
+                        current_time = datetime.now().time()
+                        is_market_open = (
+                            (current_time >= datetime.strptime('09:30', '%H:%M').time() and
+                             current_time <= datetime.strptime('11:30', '%H:%M').time()) or
+                            (current_time >= datetime.strptime('13:00', '%H:%M').time() and
+                             current_time <= datetime.strptime('15:00', '%H:%M').time())
+                        )
+                        
+                        # 确定开盘价
+                        open_price = float(real_time_quote['open'])
+                        if not is_market_open:
+                            # 非交易时间，使用历史数据中的开盘价
+                            if len(daily_data) > 0 and daily_data.iloc[-1]['trade_date'] == current_date.strftime('%Y%m%d'):
+                                open_price = float(daily_data.iloc[-1]['open'])
+                        
                         # 创建今日实时数据行
                         today_data = pd.DataFrame([{
                             'ts_code': ts_code,
                             'trade_date': current_date.strftime('%Y%m%d'),
-                            'open': float(real_time_quote['open']),
+                            'open': open_price,  # 使用确定的开盘价
                             'high': float(real_time_quote['high']),
                             'low': float(real_time_quote['low']),
                             'close': float(real_time_quote['now']),  # 当前价格作为收盘价
