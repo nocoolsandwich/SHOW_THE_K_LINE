@@ -12,7 +12,7 @@ const API_BASE_URL = getAPIBaseURL();
 // 获取API基础URL
 function getAPIBaseURL() {
     // 获取当前主机
-    const host = window.location.hostname;
+    const host = '127.0.0.1';
     const port = '5000'; // 后端服务端口
     
     // 使用相对协议，自动适应http或https
