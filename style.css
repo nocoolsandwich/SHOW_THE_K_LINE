@@ -183,6 +183,26 @@ header p {
     background-color: rgba(0, 170, 0, 0.1);
 }
 
+/* 多期间涨跌幅样式 */
+.period-change {
+    font-size: 0.75em;
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-weight: 400;
+    opacity: 0.8;
+    margin-left: 2px;
+}
+
+.period-change.stock-up {
+    color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.08);
+}
+
+.period-change.stock-down {
+    color: #22aa22;
+    background-color: rgba(34, 170, 34, 0.08);
+}
+
 /* 小型加载动画 */
 .loading-small {
     display: flex;

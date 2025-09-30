@@ -11,12 +11,8 @@ const API_BASE_URL = getAPIBaseURL();
 
 // 获取API基础URL
 function getAPIBaseURL() {
-    // 获取当前主机
-    const host = '127.0.0.1';
-    const port = '5000'; // 后端服务端口
-    
-    // 使用相对协议，自动适应http或https
-    return `${window.location.protocol}//${host}:${port}/api`;
+    // 现在前端和后端在同一个服务上，直接使用相对路径
+    return `${window.location.origin}/api`;
 }
 
 // 更新状态显示
@@ -393,6 +389,36 @@ async function getLatestQuote(stockCode) {
     }
     }
 
+// 智能股票匹配函数 - 避免误识别
+function isStockMatch(text, stockKey) {
+    // 如果是6位数字代码，需要更严格的匹配
+    if (/^\d{6}$/.test(stockKey)) {
+        // 6位数字代码需要前后有分隔符或边界
+        const pattern = new RegExp(`(?:^|[^\\d])${stockKey}(?:[^\\d]|$)`);
+        return pattern.test(text);
+    }
+    
+    // 如果是股票名称，需要避免部分匹配
+    if (stockKey.length >= 2) {
+        // 对于较短的名称（2-3个字符），需要更严格的匹配
+        if (stockKey.length <= 3) {
+            // 短名称需要前后有分隔符或特定字符
+            const pattern = new RegExp(`(?:^|[\\s，。、；：""''（）【】〈〉《》「」『』]?)${escapeRegExp(stockKey)}(?:[\\s，。、；：""''（）【】〈〉《》「」『』]?|$)`);
+            return pattern.test(text);
+        } else {
+            // 较长的名称可以使用简单包含匹配
+            return text.includes(stockKey);
+        }
+    }
+    
+    return false;
+}
+
+// 转义正则表达式特殊字符
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // 修改高亮股票的函数
 async function highlightStocks(text) {
     if (!stockDataLoaded) {
@@ -407,9 +433,9 @@ async function highlightStocks(text) {
     const quoteData = {};
     const stocksToProcess = new Set();
             
-    // 第一步：收集所有需要处理的股票
+    // 第一步：收集所有需要处理的股票 - 使用更精确的匹配算法
     for (const key in stockMappings) {
-        if (text.includes(key)) {
+        if (isStockMatch(text, key)) {
             stocksToProcess.add(key);
         }
     }
@@ -441,7 +467,7 @@ async function highlightStocks(text) {
 
         // 按长度排序处理股票，避免短名称替换长名称的一部分
         const stocksInLine = Array.from(stocksToProcess)
-            .filter(stock => line.includes(stock))
+            .filter(stock => isStockMatch(line, stock))
             .sort((a, b) => b.length - a.length);
 
         for (const stock of stocksInLine) {
@@ -452,7 +478,31 @@ async function highlightStocks(text) {
             if (quote) {
                 const pctChg = quote.pct_chg;
                 const changeClass = pctChg >= 0 ? 'stock-up' : 'stock-down';
-                changeText = `<span class="stock-change ${changeClass}">${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}%</span>`;
+                
+                // 构建当日涨跌幅
+                let currentChangeText = `${pctChg >= 0 ? '+' : ''}${pctChg.toFixed(2)}%`;
+                
+                // 构建多期间涨跌幅文本
+                let multiPeriodText = '';
+                if (quote.multi_period_changes) {
+                    const periods = ['3d', '5d', '10d'];
+                    const periodTexts = [];
+                    
+                    for (const period of periods) {
+                        const periodChange = quote.multi_period_changes[period];
+                        if (periodChange !== null && periodChange !== undefined) {
+                            const periodClass = periodChange >= 0 ? 'stock-up' : 'stock-down';
+                            const periodSign = periodChange >= 0 ? '+' : '';
+                            periodTexts.push(`<span class="period-change ${periodClass}">${periodSign}${periodChange.toFixed(1)}%</span>`);
+                        }
+                    }
+                    
+                    if (periodTexts.length > 0) {
+                        multiPeriodText = ' ' + periodTexts.join(' ');
+                    }
+                }
+                
+                changeText = `<span class="stock-change ${changeClass}">${currentChangeText}${multiPeriodText}</span>`;
             }
 
             const replacement = `<span class="stock-highlight" onclick="handleStockClick(this)" 
