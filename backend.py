@@ -54,14 +54,14 @@ def static_files(filename):
 
 def main():
     """主函数 - 启动Flask应用"""
-    print("🚀 股票信息查看器启动中...")
-    print("📊 股票列表缓存状态:", "✅ 有效" if cache.is_cache_valid(STOCK_LIST_CACHE_FILE) else "🔄 需要更新")
+    print("股票信息查看器启动中...")
+    print("股票列表缓存状态:", "有效" if cache.is_cache_valid(STOCK_LIST_CACHE_FILE) else "需要更新")
     print("📡 数据源: EasyQuotation (实时数据)")
     print("")
-    print("🌐 前端页面: http://127.0.0.1:5001")
-    print("📊 API接口: http://127.0.0.1:5001/api")
+    print("前端页面: http://127.0.0.1:5001")
+    print("API接口: http://127.0.0.1:5001/api")
     print("")
-    print("✨ 一体化服务启动 - 无需启动多个服务！")
+    print("一体化服务启动 - 无需启动多个服务！")
     print("=" * 50)
     
     # 启动Flask应用
@@ -69,5 +69,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
     main()
